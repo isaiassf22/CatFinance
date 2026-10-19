@@ -47,12 +47,12 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
       {
         name: 'default',
         ttl: 60000, // 60s
-        limit: 60, // 60 req/min global
+        limit: process.env.NODE_ENV === 'test' ? 1000 : 60, // 60 req/min global
       },
       {
         name: 'auth',
         ttl: 900000, // 15 min
-        limit: 10, // 10 req/15min on auth
+        limit: process.env.NODE_ENV === 'test' ? 1000 : 10, // 10 req/15min on auth
       },
     ]),
     PrismaModule,

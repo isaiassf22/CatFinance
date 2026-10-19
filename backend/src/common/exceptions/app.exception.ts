@@ -14,7 +14,8 @@ export class AppException extends HttpException {
     status: HttpStatus = HttpStatus.BAD_REQUEST,
     public readonly details: ApiErrorDetail[] = []
   ) {
-    super({ error: { code, message, details } }, status);
+    super({ error: { code, message, details } }, status, { description: message });
+    this.message = message;
     this.errorMessage = message;
   }
 }
@@ -90,3 +91,34 @@ export class SheetNotFoundException extends AppException {
     super('SHEET_NOT_FOUND', message, HttpStatus.NOT_FOUND);
   }
 }
+
+export class TransactionNotFoundException extends AppException {
+  constructor(message = 'Lançamento não encontrado') {
+    super('TRANSACTION_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+export class InvalidTransactionDateException extends AppException {
+  constructor(message = 'A data do lançamento deve pertencer ao mês e ano da planilha') {
+    super('INVALID_TRANSACTION_DATE', message, HttpStatus.BAD_REQUEST);
+  }
+}
+
+export class CategoryTypeMismatchException extends AppException {
+  constructor(message = 'A categoria selecionada é incompatível com o tipo da transação') {
+    super('CATEGORY_TYPE_MISMATCH', message, HttpStatus.BAD_REQUEST);
+  }
+}
+
+export class EssentialCategoryRequiredException extends AppException {
+  constructor(message = 'Apenas as 5 categorias essenciais de despesa aceitam declaração de ausência de gasto') {
+    super('ESSENTIAL_CATEGORY_REQUIRED', message, HttpStatus.BAD_REQUEST);
+  }
+}
+
+export class DeclarationBlockedByExistingExpenseException extends AppException {
+  constructor(message = 'Não é possível declarar ausência pois já existem lançamentos reais de despesa nesta categoria para este mês') {
+    super('DECLARATION_BLOCKED_BY_EXPENSE', message, HttpStatus.CONFLICT);
+  }
+}
+

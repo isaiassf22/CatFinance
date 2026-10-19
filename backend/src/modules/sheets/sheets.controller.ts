@@ -13,6 +13,12 @@ import {
 import { SheetsService } from './sheets.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CreateSheetDto, CreateSheetSchema } from './dto/sheet.dto';
+import {
+  CreateTransactionDto,
+  CreateTransactionSchema,
+  CreateEssentialDeclarationDto,
+  CreateEssentialDeclarationSchema,
+} from './dto/transaction.dto';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 
 @Controller('sheets')
@@ -57,5 +63,41 @@ export class SheetsController {
   ) {
     const isConfirmed = confirm === 'true';
     await this.sheetsService.deleteSheet(userId, sheetId, isConfirmed);
+  }
+
+  // --- LANÇAMENTOS FINANCEIROS NA PLANILHA ---
+
+  @Post(':sheetId/transactions')
+  @HttpCode(HttpStatus.CREATED)
+  async addTransaction(
+    @CurrentUser('id') userId: string,
+    @Param('sheetId') sheetId: string,
+    @Body(new ZodValidationPipe(CreateTransactionSchema))
+    dto: CreateTransactionDto
+  ) {
+    return this.sheetsService.addTransaction(userId, sheetId, dto);
+  }
+
+  // --- DECLARAÇÃO "NÃO TENHO ESSE GASTO" ---
+
+  @Post(':sheetId/essential-declarations')
+  @HttpCode(HttpStatus.CREATED)
+  async addEssentialDeclaration(
+    @CurrentUser('id') userId: string,
+    @Param('sheetId') sheetId: string,
+    @Body(new ZodValidationPipe(CreateEssentialDeclarationSchema))
+    dto: CreateEssentialDeclarationDto
+  ) {
+    return this.sheetsService.addEssentialDeclaration(userId, sheetId, dto);
+  }
+
+  @Delete(':sheetId/essential-declarations/:categoryId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async removeEssentialDeclaration(
+    @CurrentUser('id') userId: string,
+    @Param('sheetId') sheetId: string,
+    @Param('categoryId') categoryId: string
+  ) {
+    await this.sheetsService.removeEssentialDeclaration(userId, sheetId, categoryId);
   }
 }

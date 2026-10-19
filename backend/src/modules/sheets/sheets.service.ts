@@ -6,6 +6,12 @@ import {
   SheetAlreadyExistsException,
   SheetNotFoundException,
   ConfirmationRequiredException,
+  TransactionNotFoundException,
+  InvalidTransactionDateException,
+  CategoryNotFoundException,
+  CategoryTypeMismatchException,
+  EssentialCategoryRequiredException,
+  DeclarationBlockedByExistingExpenseException,
 } from '../../common/exceptions/app.exception';
 
 @Injectable()
@@ -269,4 +275,376 @@ export class SheetsService {
       });
     });
   }
+
+  // --- MÉTODOS DO ÉPICO 3: TRANSAÇÕES E DECLARAÇÕES ESSENCIAIS ---
+
+  async addTransaction(userId: string, sheetId: string, dto: import('./dto/transaction.dto').CreateTransactionDto) {
+    const sheet = await this.prisma.monthlySheet.findUnique({
+      where: { id: sheetId },
+    });
+
+    if (!sheet || sheet.userId !== userId) {
+      throw new SheetNotFoundException();
+    }
+
+    // 1. Validar correspondência estrita de ano e mês (DEC-14, DEC-31)
+    const [yearStr, monthStr, dayStr] = dto.transactionDate.split('-');
+    const txYear = parseInt(yearStr, 10);
+    const txMonth = parseInt(monthStr, 10);
+    const txDay = parseInt(dayStr, 10);
+
+    if (txYear !== sheet.year || txMonth !== sheet.month) {
+      throw new InvalidTransactionDateException(
+        `A data do lançamento (${dto.transactionDate}) deve pertencer ao mês e ano da planilha (${sheet.month}/${sheet.year})`
+      );
+    }
+
+    // 2. Validar existência e tipo da categoria (DEC-10, DEC-35)
+    const category = await this.prisma.category.findFirst({
+      where: {
+        id: dto.categoryId,
+        OR: [{ userId }, { isSystem: true }],
+      },
+    });
+
+    if (!category) {
+      throw new CategoryNotFoundException();
+    }
+
+    if (category.type !== dto.type) {
+      throw new CategoryTypeMismatchException(
+        `A categoria "${category.name}" é do tipo ${category.type}, incompatível com a movimentação ${dto.type}`
+      );
+    }
+
+    // 3. Execução em transação atômica: criação de recorrência (se isRecurring), transação e remoção automática de declaração (DEC-12)
+    const dateObj = new Date(Date.UTC(txYear, txMonth - 1, txDay, 12, 0, 0));
+
+    let removedDeclaration = false;
+    let createdTransaction: any = null;
+
+    await this.prisma.$transaction(async (tx) => {
+      let recurrenceRuleId: string | null = null;
+
+      if (dto.isRecurring) {
+        const rule = await tx.recurrenceRule.create({
+          data: {
+            userId,
+            categoryId: dto.categoryId,
+            type: dto.type,
+            description: dto.description,
+            amountCents: dto.amountCents,
+            notes: dto.notes,
+            dayOfMonth: txDay,
+            startYear: sheet.year,
+            startMonth: sheet.month,
+            isActive: true,
+          },
+        });
+        recurrenceRuleId = rule.id;
+      }
+
+      createdTransaction = await tx.transaction.create({
+        data: {
+          userId,
+          sheetId,
+          categoryId: dto.categoryId,
+          recurrenceRuleId,
+          description: dto.description,
+          amountCents: dto.amountCents,
+          type: dto.type,
+          transactionDate: dateObj,
+          notes: dto.notes,
+        },
+        include: {
+          category: {
+            select: { id: true, name: true, type: true, isEssential: true },
+          },
+          recurrenceRule: {
+            select: { id: true, isActive: true },
+          },
+        },
+      });
+
+      // Transição automática: se for despesa real em categoria essencial e houver declaração "Não tenho esse gasto", remove (DEC-12)
+      if (dto.type === TransactionType.EXPENSE && category.isEssential) {
+        const deletedDecl = await tx.essentialDeclaration.deleteMany({
+          where: {
+            sheetId,
+            categoryId: dto.categoryId,
+          },
+        });
+        if (deletedDecl.count > 0) {
+          removedDeclaration = true;
+        }
+      }
+    });
+
+    // 4. Checar se as 5 essenciais foram concluídas para desbloquear permanentemente o Dashboard (DEC-05)
+    const dashboardUnlockedNow = await this.checkAndUnlockDashboard(userId, sheetId);
+
+    return {
+      transaction: createdTransaction,
+      removedDeclaration,
+      dashboardUnlockedNow,
+    };
+  }
+
+  async updateTransaction(userId: string, transactionId: string, dto: import('./dto/transaction.dto').UpdateTransactionDto) {
+    const existingTx = await this.prisma.transaction.findUnique({
+      where: { id: transactionId },
+      include: {
+        sheet: true,
+        category: true,
+      },
+    });
+
+    if (!existingTx || existingTx.userId !== userId) {
+      throw new TransactionNotFoundException();
+    }
+
+    const sheet = existingTx.sheet;
+
+    // 1. Validar correspondência de data caso fornecida
+    let dateObj = existingTx.transactionDate;
+    if (dto.transactionDate) {
+      const [yearStr, monthStr, dayStr] = dto.transactionDate.split('-');
+      const txYear = parseInt(yearStr, 10);
+      const txMonth = parseInt(monthStr, 10);
+      const txDay = parseInt(dayStr, 10);
+
+      if (txYear !== sheet.year || txMonth !== sheet.month) {
+        throw new InvalidTransactionDateException(
+          `A data do lançamento (${dto.transactionDate}) deve pertencer ao mês e ano da planilha (${sheet.month}/${sheet.year})`
+        );
+      }
+      dateObj = new Date(Date.UTC(txYear, txMonth - 1, txDay, 12, 0, 0));
+    }
+
+    // 2. Validar categoria se fornecida
+    let category = existingTx.category;
+    if (dto.categoryId && dto.categoryId !== existingTx.categoryId) {
+      const newCategory = await this.prisma.category.findFirst({
+        where: {
+          id: dto.categoryId,
+          OR: [{ userId }, { isSystem: true }],
+        },
+      });
+
+      if (!newCategory) {
+        throw new CategoryNotFoundException();
+      }
+
+      if (newCategory.type !== existingTx.type) {
+        throw new CategoryTypeMismatchException(
+          `A categoria "${newCategory.name}" é do tipo ${newCategory.type}, incompatível com a movimentação ${existingTx.type}`
+        );
+      }
+      category = newCategory;
+    }
+
+    let recurrenceDeactivated = false;
+
+    // 3. Atualizar atomicamente
+    let updatedTx: any = null;
+    await this.prisma.$transaction(async (tx) => {
+      // Se tiver regra de recorrência e isRecurring foi explicitamente desmarcado (false), desativa a regra para os próximos meses (DEC-15)
+      if (existingTx.recurrenceRuleId && dto.isRecurring === false) {
+        await tx.recurrenceRule.update({
+          where: { id: existingTx.recurrenceRuleId },
+          data: { isActive: false },
+        });
+        recurrenceDeactivated = true;
+      }
+
+      updatedTx = await tx.transaction.update({
+        where: { id: transactionId },
+        data: {
+          description: dto.description ?? existingTx.description,
+          amountCents: dto.amountCents ?? existingTx.amountCents,
+          categoryId: dto.categoryId ?? existingTx.categoryId,
+          transactionDate: dateObj,
+          notes: dto.notes !== undefined ? dto.notes : existingTx.notes,
+        },
+        include: {
+          category: {
+            select: { id: true, name: true, type: true, isEssential: true },
+          },
+          recurrenceRule: {
+            select: { id: true, isActive: true },
+          },
+        },
+      });
+
+      // Se mudou para categoria essencial de despesa, remove declaração de ausência se houver
+      if (existingTx.type === TransactionType.EXPENSE && category.isEssential) {
+        await tx.essentialDeclaration.deleteMany({
+          where: {
+            sheetId: sheet.id,
+            categoryId: category.id,
+          },
+        });
+      }
+    });
+
+    const dashboardUnlockedNow = await this.checkAndUnlockDashboard(userId, sheet.id);
+
+    return {
+      transaction: updatedTx,
+      recurrenceDeactivated,
+      dashboardUnlockedNow,
+    };
+  }
+
+  async deleteTransaction(userId: string, transactionId: string) {
+    const transaction = await this.prisma.transaction.findUnique({
+      where: { id: transactionId },
+    });
+
+    if (!transaction || transaction.userId !== userId) {
+      throw new TransactionNotFoundException();
+    }
+
+    await this.prisma.transaction.delete({
+      where: { id: transactionId },
+    });
+  }
+
+  async addEssentialDeclaration(userId: string, sheetId: string, dto: import('./dto/transaction.dto').CreateEssentialDeclarationDto) {
+    const sheet = await this.prisma.monthlySheet.findUnique({
+      where: { id: sheetId },
+    });
+
+    if (!sheet || sheet.userId !== userId) {
+      throw new SheetNotFoundException();
+    }
+
+    // 1. Categoria deve ser do sistema e essencial (RF-09, DEC-12)
+    const category = await this.prisma.category.findUnique({
+      where: { id: dto.categoryId },
+    });
+
+    if (!category || !category.isSystem || !category.isEssential || category.type !== TransactionType.EXPENSE) {
+      throw new EssentialCategoryRequiredException(
+        'Apenas as 5 categorias essenciais de despesa aceitam declaração de ausência de gasto'
+      );
+    }
+
+    // 2. Não pode haver despesa real nesta categoria e mês (DEC-12)
+    const existingExpense = await this.prisma.transaction.findFirst({
+      where: {
+        sheetId,
+        categoryId: dto.categoryId,
+        type: TransactionType.EXPENSE,
+      },
+    });
+
+    if (existingExpense) {
+      throw new DeclarationBlockedByExistingExpenseException(
+        `Não é possível declarar "Não tenho esse gasto" para "${category.name}" pois já existe um lançamento de R$ ${(existingExpense.amountCents / 100).toFixed(2)} registrado neste mês.`
+      );
+    }
+
+    // 3. Criação idempotente (upsert)
+    const declaration = await this.prisma.essentialDeclaration.upsert({
+      where: {
+        sheetId_categoryId: {
+          sheetId,
+          categoryId: dto.categoryId,
+        },
+      },
+      create: {
+        userId,
+        sheetId,
+        categoryId: dto.categoryId,
+      },
+      update: {},
+    });
+
+    // 4. Checar se as 5 essenciais foram concluídas para desbloqueio permanente do Dashboard (DEC-05)
+    const dashboardUnlockedNow = await this.checkAndUnlockDashboard(userId, sheetId);
+
+    return {
+      declarationId: declaration.id,
+      dashboardUnlockedNow,
+    };
+  }
+
+  async removeEssentialDeclaration(userId: string, sheetId: string, categoryId: string) {
+    const sheet = await this.prisma.monthlySheet.findUnique({
+      where: { id: sheetId },
+    });
+
+    if (!sheet || sheet.userId !== userId) {
+      throw new SheetNotFoundException();
+    }
+
+    await this.prisma.essentialDeclaration.deleteMany({
+      where: {
+        sheetId,
+        categoryId,
+        userId,
+      },
+    });
+  }
+
+  /**
+   * Checa se todas as 5 categorias essenciais foram preenchidas nesta planilha.
+   * Se sim e o usuário ainda não tiver o dashboard liberado, atualiza `dashboardUnlocked = true` (DEC-05).
+   */
+  async checkAndUnlockDashboard(userId: string, sheetId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { dashboardUnlocked: true },
+    });
+
+    if (!user || user.dashboardUnlocked) {
+      return false;
+    }
+
+    const essentialCategories = await this.prisma.category.findMany({
+      where: { isSystem: true, isEssential: true },
+      select: { id: true },
+    });
+
+    const essentialIds = essentialCategories.map((c) => c.id);
+
+    const [transactions, declarations] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where: {
+          sheetId,
+          categoryId: { in: essentialIds },
+          type: TransactionType.EXPENSE,
+        },
+        select: { categoryId: true },
+      }),
+      this.prisma.essentialDeclaration.findMany({
+        where: {
+          sheetId,
+          categoryId: { in: essentialIds },
+        },
+        select: { categoryId: true },
+      }),
+    ]);
+
+    const completedCategoryIds = new Set<string>();
+    transactions.forEach((tx) => completedCategoryIds.add(tx.categoryId));
+    declarations.forEach((decl) => completedCategoryIds.add(decl.categoryId));
+
+    const isAllCompleted = essentialIds.every((id) => completedCategoryIds.has(id));
+
+    if (isAllCompleted) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          dashboardUnlocked: true,
+          dashboardUnlockedAt: new Date(),
+        },
+      });
+      return true;
+    }
+
+    return false;
+  }
 }
+
