@@ -54,3 +54,39 @@ export class InvalidPasswordException extends AppException {
     super('INVALID_PASSWORD', message, HttpStatus.BAD_REQUEST);
   }
 }
+
+export class CategoryAlreadyExistsException extends AppException {
+  constructor(message = 'Já existe uma categoria com este nome para este tipo') {
+    super('CATEGORY_ALREADY_EXISTS', message, HttpStatus.CONFLICT);
+  }
+}
+
+export class CannotDeleteSystemCategoryException extends AppException {
+  constructor(message = 'Categorias padrão do sistema não podem ser excluídas') {
+    super('CANNOT_DELETE_SYSTEM_CATEGORY', message, HttpStatus.FORBIDDEN);
+  }
+}
+
+export class CategoryNotFoundException extends AppException {
+  constructor(message = 'Categoria não encontrada') {
+    super('CATEGORY_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
+
+export class ConfirmationRequiredException extends AppException {
+  constructor(message = 'Confirmação explícita é obrigatória (?confirm=true)') {
+    super('CONFIRMATION_REQUIRED', message, HttpStatus.BAD_REQUEST);
+  }
+}
+
+export class SheetAlreadyExistsException extends AppException {
+  constructor(message = 'Já existe uma planilha criada para este ano e mês') {
+    super('SHEET_ALREADY_EXISTS', message, HttpStatus.CONFLICT);
+  }
+}
+
+export class SheetNotFoundException extends AppException {
+  constructor(message = 'Planilha não encontrada para o período informado') {
+    super('SHEET_NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+}
