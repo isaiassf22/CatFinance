@@ -35,3 +35,7 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+# AI tooling
+.claude/
+.cursor/
+.devin/
