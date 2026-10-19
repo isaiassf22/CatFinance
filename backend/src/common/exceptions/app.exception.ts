@@ -122,3 +122,10 @@ export class DeclarationBlockedByExistingExpenseException extends AppException {
   }
 }
 
+export class DashboardLockedException extends AppException {
+  constructor(message = 'O Dashboard está bloqueado. Conclua as 5 despesas essenciais em uma planilha para desbloqueá-lo.') {
+    super('DASHBOARD_LOCKED', message, HttpStatus.FORBIDDEN);
+  }
+}
+
+

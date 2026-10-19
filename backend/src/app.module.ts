@@ -8,6 +8,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { MeModule } from './modules/me/me.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { SheetsModule } from './modules/sheets/sheets.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
@@ -60,6 +61,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     MeModule,
     CategoriesModule,
     SheetsModule,
+    DashboardModule,
   ],
   providers: [
     {
