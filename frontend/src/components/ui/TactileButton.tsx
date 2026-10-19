@@ -8,7 +8,7 @@ function cn(...inputs: ClassValue[]) {
 
 export interface TactileButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'green' | 'coral' | 'blue' | 'gold' | 'gray' | 'ghost';
+  variant?: 'green' | 'coral' | 'blue' | 'gold' | 'purple' | 'gray' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   fullWidth?: boolean;
 }
@@ -38,6 +38,8 @@ export const TactileButton = React.forwardRef<HTMLButtonElement, TactileButtonPr
         'bg-duo-blue text-white border-b-4 border-duo-blueDark hover:brightness-105 active:border-b-0',
       gold:
         'bg-duo-gold text-white border-b-4 border-duo-goldDark hover:brightness-105 active:border-b-0',
+      purple:
+        'bg-purple-600 text-white border-b-4 border-purple-800 hover:brightness-105 active:border-b-0',
       gray:
         'bg-white text-gray-700 border-2 border-duo-gray border-b-4 border-b-duo-grayDark hover:bg-gray-50 active:border-b-2',
       ghost:

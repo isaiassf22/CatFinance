@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   FolderKanban,
@@ -8,13 +8,20 @@ import {
   Settings,
   LogOut,
   Cat,
+  MessageSquarePlus,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { TactileButton } from '../ui/TactileButton';
+import { FeedbackModal } from '../ui/FeedbackModal';
+import { GuidedOnboardingModal } from '../ui/GuidedOnboardingModal';
 
 export const AppLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => user ? !user.onboardingCompleted : false
+  );
 
   const navItems = [
     {
@@ -100,8 +107,19 @@ export const AppLayout: React.FC = () => {
           </nav>
         </div>
 
-        {/* User Profile & Logout */}
+        {/* User Profile, Feedback & Logout */}
         <div className="pt-4 border-t-2 border-duo-gray space-y-3">
+          <TactileButton
+            variant="purple"
+            size="sm"
+            fullWidth
+            onClick={() => setIsFeedbackOpen(true)}
+            className="text-xs"
+          >
+            <MessageSquarePlus className="w-4 h-4 mr-1" />
+            Enviar Feedback
+          </TactileButton>
+
           <div className="px-3 py-2 bg-gray-50 rounded-xl border border-gray-200">
             <p className="text-[10px] font-black uppercase text-gray-400">
               Conta Conectada
@@ -130,6 +148,31 @@ export const AppLayout: React.FC = () => {
           <Outlet />
         </div>
       </main>
+
+      {/* Floating feedback button on mobile */}
+      <div className="md:hidden fixed top-4 right-4 z-40">
+        <button
+          onClick={() => setIsFeedbackOpen(true)}
+          className="p-2.5 bg-purple-600 text-white rounded-full shadow-lg border-b-2 border-purple-800 active:translate-y-0.5"
+          title="Enviar Feedback"
+        >
+          <MessageSquarePlus className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Feedback Modal */}
+      <FeedbackModal
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
+      />
+
+      {/* Guided Onboarding Modal */}
+      {user && !user.onboardingCompleted && (
+        <GuidedOnboardingModal
+          isOpen={showOnboarding}
+          onComplete={() => setShowOnboarding(false)}
+        />
+      )}
 
       {/* Mobile Fixed Bottom Navigation Bar */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-duo-gray flex items-center justify-around py-2 px-1 z-50 shadow-lg">
