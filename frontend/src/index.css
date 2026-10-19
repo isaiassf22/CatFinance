@@ -2,26 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  body {
+    @apply bg-duo-bg text-gray-800 font-nunito antialiased selection:bg-duo-green/20 selection:text-duo-greenDark;
+  }
+}
+
 @layer components {
+  /* Physical 3D Tactile Buttons */
   .btn-tactile {
-    @apply font-bold rounded-2xl px-6 py-3 transition-all duration-75 uppercase tracking-wide inline-flex items-center justify-center gap-2 select-none;
+    @apply font-extrabold rounded-2xl px-5 py-3 transition-all duration-100 uppercase tracking-wider inline-flex items-center justify-center gap-2 select-none active:translate-y-1 active:border-b-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:active:translate-y-0;
   }
+  
   .btn-tactile-green {
-    @apply btn-tactile bg-duo-green text-white border-b-4 border-duo-greenDark hover:bg-[#52be02] active:border-b-0 active:translate-y-1;
+    @apply btn-tactile bg-duo-green text-white border-b-4 border-duo-greenDark hover:brightness-105 active:border-b-0;
   }
+
+  .btn-tactile-coral {
+    @apply btn-tactile bg-duo-coral text-white border-b-4 border-duo-coralDark hover:brightness-105 active:border-b-0;
+  }
+
   .btn-tactile-blue {
-    @apply btn-tactile bg-duo-blue text-white border-b-4 border-duo-blueDark hover:bg-[#19a2e3] active:border-b-0 active:translate-y-1;
+    @apply btn-tactile bg-duo-blue text-white border-b-4 border-duo-blueDark hover:brightness-105 active:border-b-0;
   }
-  .btn-tactile-yellow {
-    @apply btn-tactile bg-duo-yellow text-white border-b-4 border-duo-yellowDark hover:bg-[#f0bc00] active:border-b-0 active:translate-y-1;
+
+  .btn-tactile-gold {
+    @apply btn-tactile bg-duo-gold text-white border-b-4 border-duo-goldDark hover:brightness-105 active:border-b-0;
   }
-  .btn-tactile-red {
-    @apply btn-tactile bg-duo-red text-white border-b-4 border-duo-redDark hover:bg-[#f04040] active:border-b-0 active:translate-y-1;
-  }
+
   .btn-tactile-gray {
-    @apply btn-tactile bg-white text-gray-700 border-2 border-duo-gray border-b-4 border-b-duo-grayDark hover:bg-gray-50 active:border-b-2 active:translate-y-0.5;
+    @apply btn-tactile bg-white text-gray-700 border-2 border-duo-gray border-b-4 border-b-duo-grayDark hover:bg-gray-50 active:border-b-2;
   }
+
+  /* Physical 3D Tactile Cards */
   .card-tactile {
-    @apply bg-white rounded-2xl border-2 border-duo-gray border-b-4 border-b-duo-grayDark p-4 transition-all;
+    @apply bg-white rounded-2xl border-2 border-duo-gray border-b-4 border-b-duo-grayDark p-5 transition-all duration-100;
+  }
+
+  .card-tactile-interactive {
+    @apply card-tactile cursor-pointer hover:border-duo-blue hover:border-b-duo-blueDark active:translate-y-0.5;
   }
 }

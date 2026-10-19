@@ -8,7 +8,7 @@
 
 ## 2. Status de Execução dos Passos (Atualizado pelo Agente)
 - [x] **Passo 1 (Concluído: 1A + 1B):** Setup inicial da raiz (`.gitignore`), `backend/` (NestJS, Prisma, Zod, Pino redaction, Rate Limiting), `frontend/` (React, Vite, TS, Tailwind CSS Duolingo), `schema.prisma` com todas as entidades para Supabase, endpoints Auth & Me (`/auth/register`, `/auth/login`, `/me`, `PATCH /me/onboarding`, `DELETE /me`), migration inicial aplicada no Supabase com índice parcial `uq_recurrence_per_sheet` em dev e test, e 42 testes automatizados (unitários + integração E2E com isolamento IDOR) 100% aprovados.
-- [ ] **Passo 1.5:** Design System Gamificado (Estilo Duolingo), Rotas React e Camada Axios/React Query.
+- [x] **Passo 1.5 (Concluído):** Arquitetura Completa do Frontend React, Design System Gamificado estilo Duolingo (`TactileButton` 3D, `SelectableCard`, `ProgressBar`, paleta vibrante com verde, coral, azul e dourado), layout responsivo com Sidebar desktop e Bottom bar mobile, árvore de rotas públicas (`/login`, `/register`) e protegidas (`/sheets`, `/categories`, `/dashboard`, `/learn`, `/settings`), camada de comunicação com Axios, interceptores JWT, Sonner toasts e utilitários de formatação de moeda em centavos (`formatCentsToBRL`, `parseBRLToCents`). Build 100% validado.
 - [ ] **Passo 2:** Seed de 14 Categorias Padrão, Categorias Personalizadas e Planilhas Mensais (Pastas Ano/Mês + Deletar Planilha).
 - [ ] **Passo 3:** Lançamentos em Centavos, Declarações "Não tenho esse gasto" e Desbloqueio do Dashboard.
 - [ ] **Passo 4:** Motor de Recorrência Mensal (Meses curtos, Modal de confirmação e Recuperação manual idempotente).
