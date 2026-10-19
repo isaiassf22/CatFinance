@@ -18,6 +18,8 @@ import {
   CreateTransactionSchema,
   CreateEssentialDeclarationDto,
   CreateEssentialDeclarationSchema,
+  ApplyRecurrencesDto,
+  ApplyRecurrencesSchema,
 } from './dto/transaction.dto';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 
@@ -99,5 +101,27 @@ export class SheetsController {
     @Param('categoryId') categoryId: string
   ) {
     await this.sheetsService.removeEssentialDeclaration(userId, sheetId, categoryId);
+  }
+
+  // --- MOTOR DE RECORRÊNCIA MENSAL ---
+
+  @Post(':sheetId/recurrences/apply')
+  @HttpCode(HttpStatus.OK)
+  async applyRecurrences(
+    @CurrentUser('id') userId: string,
+    @Param('sheetId') sheetId: string,
+    @Body(new ZodValidationPipe(ApplyRecurrencesSchema))
+    dto: ApplyRecurrencesDto
+  ) {
+    return this.sheetsService.applyRecurrences(userId, sheetId, dto);
+  }
+
+  @Post(':sheetId/recurrences/dismiss')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async dismissRecurrencePrompt(
+    @CurrentUser('id') userId: string,
+    @Param('sheetId') sheetId: string
+  ) {
+    await this.sheetsService.dismissRecurrencePrompt(userId, sheetId);
   }
 }

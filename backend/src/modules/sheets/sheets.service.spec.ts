@@ -19,6 +19,7 @@ describe('SheetsService', () => {
       findMany: jest.fn(),
       findUnique: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
       delete: jest.fn(),
     },
     category: {
@@ -36,6 +37,7 @@ describe('SheetsService', () => {
       deleteMany: jest.fn(),
     },
     recurrenceRule: {
+      findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
@@ -255,6 +257,144 @@ describe('SheetsService', () => {
           categoryId: 'cat-moradia',
         })
       ).rejects.toThrow('Não é possível declarar "Não tenho esse gasto" para "Moradia"');
+    });
+  });
+
+  describe('applyRecurrences (CB-12, DEC-17)', () => {
+    it('should adjust day 31 to 28 in February non-leap year (CB-12) and preserve idempotency (DEC-17)', async () => {
+      // Planilha de Fevereiro de 2025 (não bissexto: 28 dias)
+      mockPrismaService.monthlySheet.findUnique.mockResolvedValue({
+        id: 'sheet-feb-2025',
+        userId: 'user-1',
+        year: 2025,
+        month: 2,
+        transactions: [], // Nenhuma transação ainda
+      });
+
+      // Regra de recorrência com dayOfMonth = 31
+      mockPrismaService.recurrenceRule.findMany.mockResolvedValue([
+        {
+          id: 'rule-31',
+          userId: 'user-1',
+          categoryId: 'cat-1',
+          type: 'EXPENSE',
+          description: 'Internet Fibra',
+          amountCents: 12000,
+          notes: 'Fim do mês',
+          dayOfMonth: 31,
+          startYear: 2025,
+          startMonth: 1,
+          isActive: true,
+          category: {
+            id: 'cat-1',
+            isEssential: false,
+          },
+        },
+      ]);
+
+      mockPrismaService.transaction.create.mockImplementation(({ data }) => ({
+        id: 'tx-feb-generated',
+        ...data,
+      }));
+
+      mockPrismaService.user.findUnique.mockResolvedValue({ dashboardUnlocked: true });
+
+      const result = await service.applyRecurrences('user-1', 'sheet-feb-2025', {});
+
+      expect(result.generatedCount).toBe(1);
+      expect(mockPrismaService.transaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            recurrenceRuleId: 'rule-31',
+            transactionDate: new Date(Date.UTC(2025, 1, 28, 12, 0, 0)),
+          }),
+        })
+      );
+    });
+
+    it('should adjust day 31 to 29 in February leap year (2024)', async () => {
+      // Planilha de Fevereiro de 2024 (ano bissexto: 29 dias)
+      mockPrismaService.monthlySheet.findUnique.mockResolvedValue({
+        id: 'sheet-feb-2024',
+        userId: 'user-1',
+        year: 2024,
+        month: 2,
+        transactions: [],
+      });
+
+      mockPrismaService.recurrenceRule.findMany.mockResolvedValue([
+        {
+          id: 'rule-31',
+          userId: 'user-1',
+          categoryId: 'cat-1',
+          type: 'EXPENSE',
+          description: 'Internet Fibra',
+          amountCents: 12000,
+          dayOfMonth: 31,
+          startYear: 2024,
+          startMonth: 1,
+          isActive: true,
+          category: { id: 'cat-1', isEssential: false },
+        },
+      ]);
+
+      mockPrismaService.transaction.create.mockImplementation(({ data }) => ({
+        id: 'tx-leap-generated',
+        ...data,
+      }));
+
+      mockPrismaService.user.findUnique.mockResolvedValue({ dashboardUnlocked: true });
+
+      const result = await service.applyRecurrences('user-1', 'sheet-feb-2024', {});
+
+      expect(result.generatedCount).toBe(1);
+      expect(mockPrismaService.transaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            transactionDate: new Date(Date.UTC(2024, 1, 29, 12, 0, 0)),
+          }),
+        })
+      );
+    });
+
+    it('should be 100% idempotent and not generate duplicates if rule is already applied in sheet (DEC-17)', async () => {
+      mockPrismaService.monthlySheet.findUnique.mockResolvedValue({
+        id: 'sheet-with-applied',
+        userId: 'user-1',
+        year: 2026,
+        month: 10,
+        transactions: [{ recurrenceRuleId: 'rule-already-applied' }],
+      });
+
+      mockPrismaService.recurrenceRule.findMany.mockResolvedValue([
+        {
+          id: 'rule-already-applied',
+          userId: 'user-1',
+          categoryId: 'cat-1',
+          dayOfMonth: 10,
+          category: { id: 'cat-1', isEssential: false },
+        },
+      ]);
+
+      const result = await service.applyRecurrences('user-1', 'sheet-with-applied', {});
+      expect(result.generatedCount).toBe(0);
+      expect(result.transactions).toHaveLength(0);
+    });
+  });
+
+  describe('dismissRecurrencePrompt', () => {
+    it('should set recurrencePromptDismissed = true on the sheet', async () => {
+      mockPrismaService.monthlySheet.findUnique.mockResolvedValue({
+        id: 'sheet-1',
+        userId: 'user-1',
+      });
+
+      await service.dismissRecurrencePrompt('user-1', 'sheet-1');
+
+      expect(mockPrismaService.monthlySheet.update).toHaveBeenCalledWith({
+        where: { id: 'sheet-1' },
+        data: { recurrencePromptDismissed: true },
+      });
     });
   });
 });

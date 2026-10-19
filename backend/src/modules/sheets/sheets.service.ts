@@ -224,6 +224,41 @@ export class SheetsService {
       };
     });
 
+    // Find pending recurrences: active rules created in or before this sheet's period that have not yet generated a transaction in this sheet
+    const activeRules = await this.prisma.recurrenceRule.findMany({
+      where: {
+        userId,
+        isActive: true,
+        OR: [
+          { startYear: { lt: sheet.year } },
+          { startYear: sheet.year, startMonth: { lte: sheet.month } },
+        ],
+      },
+      include: {
+        category: {
+          select: { id: true, name: true, type: true, isEssential: true },
+        },
+      },
+    });
+
+    const appliedRuleIds = new Set(
+      sheet.transactions
+        .map((tx) => tx.recurrenceRuleId)
+        .filter((id): id is string => Boolean(id))
+    );
+
+    const pendingRecurrences = activeRules
+      .filter((rule) => !appliedRuleIds.has(rule.id))
+      .map((rule) => ({
+        id: rule.id,
+        description: rule.description,
+        amountCents: rule.amountCents,
+        type: rule.type,
+        dayOfMonth: rule.dayOfMonth,
+        categoryId: rule.categoryId,
+        category: rule.category,
+      }));
+
     return {
       sheet: {
         id: sheet.id,
@@ -240,7 +275,7 @@ export class SheetsService {
       },
       essentialsStatus,
       transactions: sheet.transactions,
-      pendingRecurrences: [],
+      pendingRecurrences,
     };
   }
 
@@ -646,5 +681,153 @@ export class SheetsService {
 
     return false;
   }
+
+  // --- MÉTODOS DO ÉPICO 4: MOTOR DE RECORRÊNCIA MENSAL ---
+
+  /**
+   * Aplica regras de recorrência ativas à planilha mensal de forma 100% idempotente (DEC-17).
+   * Ajusta automaticamente datas para o último dia válido em meses curtos (CB-12).
+   */
+  async applyRecurrences(
+    userId: string,
+    sheetId: string,
+    dto: import('./dto/transaction.dto').ApplyRecurrencesDto
+  ) {
+    const sheet = await this.prisma.monthlySheet.findUnique({
+      where: { id: sheetId },
+      include: {
+        transactions: {
+          select: { recurrenceRuleId: true },
+        },
+      },
+    });
+
+    if (!sheet || sheet.userId !== userId) {
+      throw new SheetNotFoundException();
+    }
+
+    // Buscar regras ativas aplicáveis
+    const whereClause: any = {
+      userId,
+      isActive: true,
+      OR: [
+        { startYear: { lt: sheet.year } },
+        { startYear: sheet.year, startMonth: { lte: sheet.month } },
+      ],
+    };
+
+    if (dto.ruleIds && dto.ruleIds.length > 0) {
+      whereClause.id = { in: dto.ruleIds };
+    }
+
+    const candidateRules = await this.prisma.recurrenceRule.findMany({
+      where: whereClause,
+      include: {
+        category: true,
+      },
+    });
+
+    // Filtra regras já aplicadas nesta planilha (idempotência DEC-17)
+    const existingRuleIds = new Set(
+      sheet.transactions
+        .map((tx) => tx.recurrenceRuleId)
+        .filter((id): id is string => Boolean(id))
+    );
+
+    const rulesToApply = candidateRules.filter(
+      (rule) => !existingRuleIds.has(rule.id)
+    );
+
+    if (rulesToApply.length === 0) {
+      return {
+        generatedCount: 0,
+        transactions: [],
+      };
+    }
+
+    // Último dia válido no mês da planilha (CB-12)
+    const maxDayInSheetMonth = new Date(sheet.year, sheet.month, 0).getDate();
+
+    const createdTransactions: any[] = [];
+
+    for (const rule of rulesToApply) {
+      // Ajuste de data em meses curtos sem alterar a regra matriz:
+      // Se a regra era dia 31 e o mês tem 30 (ou 28/29 em fev), usa o maxDayInSheetMonth
+      const targetDay = Math.min(rule.dayOfMonth, maxDayInSheetMonth);
+      const txDate = new Date(
+        Date.UTC(sheet.year, sheet.month - 1, targetDay, 12, 0, 0)
+      );
+
+      try {
+        const newTx = await this.prisma.transaction.create({
+          data: {
+            userId,
+            sheetId,
+            categoryId: rule.categoryId,
+            recurrenceRuleId: rule.id,
+            description: rule.description,
+            amountCents: rule.amountCents,
+            type: rule.type,
+            transactionDate: txDate,
+            notes: rule.notes,
+          },
+          include: {
+            category: {
+              select: { id: true, name: true, type: true, isEssential: true },
+            },
+            recurrenceRule: {
+              select: { id: true, isActive: true },
+            },
+          },
+        });
+
+        createdTransactions.push(newTx);
+
+        // Se for despesa real em categoria essencial, remove declaração de ausência daquele mês (CB-11)
+        if (rule.type === TransactionType.EXPENSE && rule.category.isEssential) {
+          await this.prisma.essentialDeclaration.deleteMany({
+            where: {
+              sheetId,
+              categoryId: rule.categoryId,
+            },
+          });
+        }
+      } catch (error: any) {
+        // Prisma P2002: Unique constraint failed on (sheetId, recurrenceRuleId)
+        // Em chamadas concorrentes/cliques duplos, se a regra já foi inserida por outra requisição, ignora com idempotência (DEC-17, CB-13)
+        if (error.code === 'P2002') {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    // Verificar se liberou o Dashboard após aplicar recorrências
+    await this.checkAndUnlockDashboard(userId, sheetId);
+
+    return {
+      generatedCount: createdTransactions.length,
+      transactions: createdTransactions,
+    };
+  }
+
+  /**
+   * Dispensa o prompt automático de reaproveitamento de recorrências nesta planilha
+   */
+  async dismissRecurrencePrompt(userId: string, sheetId: string) {
+    const sheet = await this.prisma.monthlySheet.findUnique({
+      where: { id: sheetId },
+    });
+
+    if (!sheet || sheet.userId !== userId) {
+      throw new SheetNotFoundException();
+    }
+
+    await this.prisma.monthlySheet.update({
+      where: { id: sheetId },
+      data: { recurrencePromptDismissed: true },
+    });
+  }
 }
+
 

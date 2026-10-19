@@ -66,6 +66,20 @@ interface SheetDetailResponse {
       isEssential: boolean;
     };
   }>;
+  pendingRecurrences: Array<{
+    id: string;
+    description: string;
+    amountCents: number;
+    type: 'INCOME' | 'EXPENSE';
+    dayOfMonth: number;
+    categoryId: string;
+    category?: {
+      id: string;
+      name: string;
+      type: 'INCOME' | 'EXPENSE';
+      isEssential: boolean;
+    };
+  }>;
 }
 
 interface CategoryItem {
@@ -87,6 +101,49 @@ export const SheetDetailPage: React.FC = () => {
   // Options & Deletion states
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false);
+
+  // Apply Recurrences Mutation
+  const applyRecurrencesMutation = useMutation({
+    mutationFn: async () => {
+      if (!data?.sheet.id) return;
+      const res = await api.post(`/sheets/${data.sheet.id}/recurrences/apply`, {});
+      return res.data;
+    },
+    onSuccess: (resData) => {
+      toast.success(
+        `${resData.generatedCount} lançamentos recorrentes aplicados com sucesso!`
+      );
+      setIsRecurrenceModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['sheet-detail', numYear, numMonth] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+
+      if (resData?.dashboardUnlockedNow) {
+        triggerConfettiCelebration();
+        toast.success(
+          '🎉 Incrível! Você concluiu as 5 despesas essenciais e liberou o Dashboard!'
+        );
+      }
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.response?.data?.error?.message ||
+          'Erro ao aplicar lançamentos recorrentes'
+      );
+    },
+  });
+
+  // Dismiss Recurrence Prompt Mutation
+  const dismissRecurrencesMutation = useMutation({
+    mutationFn: async () => {
+      if (!data?.sheet.id) return;
+      await api.post(`/sheets/${data.sheet.id}/recurrences/dismiss`);
+    },
+    onSuccess: () => {
+      setIsRecurrenceModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['sheet-detail', numYear, numMonth] });
+    },
+  });
 
   // Transaction Modal State
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
@@ -389,7 +446,7 @@ export const SheetDetailPage: React.FC = () => {
                 <button
                   onClick={() => {
                     setIsOptionsOpen(false);
-                    toast.info('Recuperar recorrentes configurado para o Passo 4.');
+                    setIsRecurrenceModalOpen(true);
                   }}
                   className="w-full px-4 py-2.5 text-left text-xs font-extrabold text-gray-700 hover:bg-blue-50 hover:text-duo-blue flex items-center gap-2.5"
                 >
@@ -839,6 +896,66 @@ export const SheetDetailPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Recurrences Confirmation Modal (DEC-15) */}
+      {(isRecurrenceModalOpen ||
+        (!data?.sheet.recurrencePromptDismissed &&
+          (data?.pendingRecurrences?.length || 0) > 0)) &&
+        data?.sheet && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white rounded-3xl border-2 border-duo-blue border-b-4 border-b-duo-blueDark p-6 max-w-md w-full space-y-5">
+              <div className="w-14 h-14 rounded-2xl bg-blue-100 text-duo-blue flex items-center justify-center mx-auto">
+                <RefreshCw className="w-8 h-8" />
+              </div>
+
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-black text-gray-800">
+                  Importar Lançamentos Recorrentes?
+                </h3>
+                <p className="text-xs font-semibold text-gray-600 leading-relaxed">
+                  Você possui{' '}
+                  <strong>{data.pendingRecurrences.length} lançamento(s) recorrente(s)</strong>{' '}
+                  ativo(s). Deseja aplicá-los automaticamente a este mês?
+                </p>
+                <div className="mt-2 max-h-40 overflow-y-auto divide-y divide-gray-100 border rounded-2xl p-2 text-left">
+                  {data.pendingRecurrences.map((r) => (
+                    <div
+                      key={r.id}
+                      className="py-1.5 flex items-center justify-between text-xs"
+                    >
+                      <span className="font-bold text-gray-700">
+                        {r.description} (Dia {r.dayOfMonth})
+                      </span>
+                      <span className="font-extrabold text-duo-coral">
+                        {formatCentsToBRL(r.amountCents)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <TactileButton
+                  variant="gray"
+                  fullWidth
+                  onClick={() => dismissRecurrencesMutation.mutate()}
+                >
+                  Agora não
+                </TactileButton>
+                <TactileButton
+                  variant="blue"
+                  fullWidth
+                  disabled={applyRecurrencesMutation.isPending}
+                  onClick={() => applyRecurrencesMutation.mutate()}
+                >
+                  {applyRecurrencesMutation.isPending
+                    ? 'Aplicando...'
+                    : 'Sim, Importar'}
+                </TactileButton>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 };

@@ -68,3 +68,10 @@ export const CreateEssentialDeclarationSchema = z.object({
 export type CreateEssentialDeclarationDto = z.infer<
   typeof CreateEssentialDeclarationSchema
 >;
+
+export const ApplyRecurrencesSchema = z.object({
+  ruleIds: z.array(z.string().uuid('ID de regra inválido')).optional(),
+});
+
+export type ApplyRecurrencesDto = z.infer<typeof ApplyRecurrencesSchema>;
+
