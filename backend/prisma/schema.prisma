@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+model User {
+  id                   String                 @id @default(uuid())
+  email                String                 @unique
+  passwordHash         String
+  dashboardUnlocked    Boolean                @default(false)
+  dashboardUnlockedAt  DateTime?
+  onboardingCompleted  Boolean                @default(false)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  categories           Category[]
+  sheets               MonthlySheet[]
+  recurrenceRules      RecurrenceRule[]
+  transactions         Transaction[]
+  essentialDeclarations EssentialDeclaration[]
+  lessonProgress       UserLessonProgress[]
+  feedbacks            Feedback[]
+}
+
+model Category {
+  id                    String                 @id @default(uuid())
+  userId                String?
+  name                  String
+  normalizedName        String
+  type                  TransactionType
+  isSystem              Boolean                @default(false)
+  isEssential           Boolean                @default(false)
+  createdAt             DateTime               @default(now())
+
+  user                  User?                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recurrenceRules       RecurrenceRule[]
+  transactions          Transaction[]
+  essentialDeclarations EssentialDeclaration[]
+
+  @@unique([userId, type, normalizedName])
+}
+
+model MonthlySheet {
+  id                        String                 @id @default(uuid())
+  userId                    String
+  year                      Int
+  month                     Int
+  recurrencePromptDismissed Boolean                @default(false)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+
+  user                      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions              Transaction[]
+  essentialDeclarations     EssentialDeclaration[]
+
+  @@unique([userId, year, month])
+}
+
+model RecurrenceRule {
+  id           String          @id @default(uuid())
+  userId       String
+  categoryId   String
+  type         TransactionType
+  description  String
+  amountCents  Int
+  notes        String?
+  dayOfMonth   Int
+  startYear    Int
+  startMonth   Int
+  isActive     Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category     Category        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+}
+
+model Transaction {
+  id                String          @id @default(uuid())
+  userId            String
+  sheetId           String
+  categoryId        String
+  recurrenceRuleId  String?
+  description       String
+  amountCents       Int
+  type              TransactionType
+  transactionDate   DateTime        @db.Date
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sheet             MonthlySheet    @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  category          Category        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  recurrenceRule    RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
+}
+
+model EssentialDeclaration {
+  id          String       @id @default(uuid())
+  userId      String
+  sheetId     String
+  categoryId  String
+  createdAt   DateTime     @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sheet       MonthlySheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  category    Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@unique([sheetId, categoryId])
+}
+
+model Lesson {
+  id           String               @id @default(uuid())
+  orderIndex   Int
+  title        String
+  summary      String
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  cards        LessonCard[]
+  questions    QuizQuestion[]
+  userProgress UserLessonProgress[]
+}
+
+model LessonCard {
+  id         String   @id @default(uuid())
+  lessonId   String
+  orderIndex Int
+  title      String
+  content    String
+  createdAt  DateTime @default(now())
+
+  lesson     Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+}
+
+model QuizQuestion {
+  id              String   @id @default(uuid())
+  lessonId        String
+  orderIndex      Int
+  prompt          String
+  options         Json
+  correctOptionId String
+  createdAt       DateTime @default(now())
+
+  lesson          Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+}
+
+model UserLessonProgress {
+  id               String   @id @default(uuid())
+  userId           String
+  lessonId         String
+  lastCardViewed   Int      @default(0)
+  isCompleted      Boolean  @default(false)
+  bestScorePercent Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson           Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+}
+
+model Feedback {
+  id               String   @id @default(uuid())
+  userId           String?
+  message          String
+  pageContext      String?
+  processedByAgent Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}

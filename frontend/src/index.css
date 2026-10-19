@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .btn-tactile {
+    @apply font-bold rounded-2xl px-6 py-3 transition-all duration-75 uppercase tracking-wide inline-flex items-center justify-center gap-2 select-none;
+  }
+  .btn-tactile-green {
+    @apply btn-tactile bg-duo-green text-white border-b-4 border-duo-greenDark hover:bg-[#52be02] active:border-b-0 active:translate-y-1;
+  }
+  .btn-tactile-blue {
+    @apply btn-tactile bg-duo-blue text-white border-b-4 border-duo-blueDark hover:bg-[#19a2e3] active:border-b-0 active:translate-y-1;
+  }
+  .btn-tactile-yellow {
+    @apply btn-tactile bg-duo-yellow text-white border-b-4 border-duo-yellowDark hover:bg-[#f0bc00] active:border-b-0 active:translate-y-1;
+  }
+  .btn-tactile-red {
+    @apply btn-tactile bg-duo-red text-white border-b-4 border-duo-redDark hover:bg-[#f04040] active:border-b-0 active:translate-y-1;
+  }
+  .btn-tactile-gray {
+    @apply btn-tactile bg-white text-gray-700 border-2 border-duo-gray border-b-4 border-b-duo-grayDark hover:bg-gray-50 active:border-b-2 active:translate-y-0.5;
+  }
+  .card-tactile {
+    @apply bg-white rounded-2xl border-2 border-duo-gray border-b-4 border-b-duo-grayDark p-4 transition-all;
+  }
+}

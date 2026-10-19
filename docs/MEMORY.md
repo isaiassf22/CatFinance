@@ -7,7 +7,7 @@
 - **DEC-40 (Supabase + UI Duolingo):** Banco PostgreSQL hospedado no Supabase (`DATABASE_URL` e `DIRECT_URL`) e interface frontend gamificada estilo Duolingo (botões 3D táteis, cores vibrantes, cards interativos e ícones).
 
 ## 2. Status de Execução dos Passos (Atualizado pelo Agente)
-- [ ] **Passo 1 (1A + 1B):** Setup Inicial (`backend/` e `frontend/`), Prisma Schema para Supabase, Auth JWT/Bcrypt e Exclusão de Conta.
+- [x] **Passo 1 (Concluído: 1A + 1B):** Setup inicial da raiz (`.gitignore`), `backend/` (NestJS, Prisma, Zod, Pino redaction, Rate Limiting), `frontend/` (React, Vite, TS, Tailwind CSS Duolingo), `schema.prisma` com todas as entidades para Supabase, endpoints Auth & Me (`/auth/register`, `/auth/login`, `/me`, `PATCH /me/onboarding`, `DELETE /me`), migration inicial aplicada no Supabase com índice parcial `uq_recurrence_per_sheet` em dev e test, e 42 testes automatizados (unitários + integração E2E com isolamento IDOR) 100% aprovados.
 - [ ] **Passo 1.5:** Design System Gamificado (Estilo Duolingo), Rotas React e Camada Axios/React Query.
 - [ ] **Passo 2:** Seed de 14 Categorias Padrão, Categorias Personalizadas e Planilhas Mensais (Pastas Ano/Mês + Deletar Planilha).
 - [ ] **Passo 3:** Lançamentos em Centavos, Declarações "Não tenho esse gasto" e Desbloqueio do Dashboard.
